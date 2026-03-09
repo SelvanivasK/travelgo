@@ -25,6 +25,10 @@ def _get_models():
 @login_required
 def mark_read(notif_id):
     models = _get_models()
+    notif = models["notifications"].get_for_user(session["user_id"])
+    if not any(n["_id"] == notif_id for n in notif):
+        flash("Notification not found.", "danger")
+        return redirect(url_for("main.dashboard"))
     models["notifications"].mark_read(notif_id)
     return redirect(url_for("main.dashboard"))
 

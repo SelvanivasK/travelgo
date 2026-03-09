@@ -6,6 +6,7 @@ from functools import wraps
 from datetime import datetime, timezone
 from io import BytesIO
 from xhtml2pdf import pisa
+from botocore.exceptions import ClientError
 import qrcode
 import base64
 
@@ -61,7 +62,10 @@ def book(item_type, item_id):
 
     if request.method == "POST":
         date = request.form.get("date", "")
-        passengers = int(request.form.get("passengers", 1))
+        try:
+            passengers = int(request.form.get("passengers", 1))
+        except (ValueError, TypeError):
+            passengers = 1
         seat_pref = request.form.get("seat_preference", "")
 
         if models["bookings"].is_duplicate(
@@ -178,7 +182,16 @@ def payment():
         }
 
         result = models["bookings"].create(booking_data)
-        model.decrement_availability(item_id, pending["passengers"])
+
+        try:
+            model.decrement_availability(item_id, pending["passengers"])
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                models["bookings"].cancel(str(result.inserted_id))
+                flash("Seats/rooms no longer available. Booking cancelled.", "danger")
+                session.pop("pending_booking", None)
+                return redirect(url_for("search.search_page"))
+            raise
 
         models["notifications"].create(
             session["user_id"],

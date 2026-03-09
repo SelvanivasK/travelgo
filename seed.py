@@ -18,7 +18,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 
 def _now():
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).isoformat()
 
 
 CITIES = [

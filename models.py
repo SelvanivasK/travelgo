@@ -37,6 +37,25 @@ def _clean_items(items):
     return [_clean_item(i) for i in items]
 
 
+def _full_scan(table, **kwargs):
+    resp = table.scan(**kwargs)
+    items = resp.get("Items", [])
+    while "LastEvaluatedKey" in resp:
+        resp = table.scan(ExclusiveStartKey=resp["LastEvaluatedKey"], **kwargs)
+        items.extend(resp.get("Items", []))
+    return items
+
+
+def _full_scan_count(table, **kwargs):
+    total = 0
+    resp = table.scan(Select="COUNT", **kwargs)
+    total += resp.get("Count", 0)
+    while "LastEvaluatedKey" in resp:
+        resp = table.scan(Select="COUNT", ExclusiveStartKey=resp["LastEvaluatedKey"], **kwargs)
+        total += resp.get("Count", 0)
+    return total
+
+
 class UserModel:
 
     def __init__(self, table):
@@ -103,15 +122,16 @@ class UserModel:
     def change_password(self, user_id, new_password):
         self.table.update_item(
             Key={"_id": str(user_id)},
-            UpdateExpression="SET password_hash = :ph",
+            UpdateExpression="SET #ph = :ph",
+            ExpressionAttributeNames={"#ph": "password_hash"},
             ExpressionAttributeValues={":ph": generate_password_hash(new_password)},
         )
 
     def get_all_users(self):
-        return _clean_items(self.table.scan().get("Items", []))
+        return _clean_items(_full_scan(self.table))
 
     def count(self):
-        return self.table.scan(Select="COUNT").get("Count", 0)
+        return _full_scan_count(self.table)
 
 
 class FlightModel:
@@ -129,7 +149,7 @@ class FlightModel:
         return data
 
     def get_all(self):
-        return _clean_items(self.table.scan().get("Items", []))
+        return _clean_items(_full_scan(self.table))
 
     def find_by_id(self, fid):
         resp = self.table.get_item(Key={"_id": str(fid)})
@@ -161,7 +181,7 @@ class FlightModel:
         self.table.delete_item(Key={"_id": str(fid)})
 
     def search(self, source, destination, date=None):
-        items = self.table.scan().get("Items", [])
+        items = _full_scan(self.table)
         src_lower = source.lower()
         dst_lower = destination.lower()
         results = []
@@ -195,7 +215,7 @@ class FlightModel:
         )
 
     def count(self):
-        return self.table.scan(Select="COUNT").get("Count", 0)
+        return _full_scan_count(self.table)
 
 
 class HotelModel:
@@ -214,7 +234,7 @@ class HotelModel:
         return data
 
     def get_all(self):
-        return _clean_items(self.table.scan().get("Items", []))
+        return _clean_items(_full_scan(self.table))
 
     def find_by_id(self, hid):
         resp = self.table.get_item(Key={"_id": str(hid)})
@@ -248,7 +268,7 @@ class HotelModel:
         self.table.delete_item(Key={"_id": str(hid)})
 
     def search(self, destination, checkin=None):
-        items = self.table.scan().get("Items", [])
+        items = _full_scan(self.table)
         dst_lower = destination.lower()
         results = []
         for item in items:
@@ -279,7 +299,7 @@ class HotelModel:
         )
 
     def count(self):
-        return self.table.scan(Select="COUNT").get("Count", 0)
+        return _full_scan_count(self.table)
 
 
 class TrainModel:
@@ -297,7 +317,7 @@ class TrainModel:
         return data
 
     def get_all(self):
-        return _clean_items(self.table.scan().get("Items", []))
+        return _clean_items(_full_scan(self.table))
 
     def find_by_id(self, tid):
         resp = self.table.get_item(Key={"_id": str(tid)})
@@ -329,7 +349,7 @@ class TrainModel:
         self.table.delete_item(Key={"_id": str(tid)})
 
     def search(self, source, destination, date=None):
-        items = self.table.scan().get("Items", [])
+        items = _full_scan(self.table)
         src_lower = source.lower()
         dst_lower = destination.lower()
         results = []
@@ -363,7 +383,7 @@ class TrainModel:
         )
 
     def count(self):
-        return self.table.scan(Select="COUNT").get("Count", 0)
+        return _full_scan_count(self.table)
 
 
 class BusModel:
@@ -381,7 +401,7 @@ class BusModel:
         return data
 
     def get_all(self):
-        return _clean_items(self.table.scan().get("Items", []))
+        return _clean_items(_full_scan(self.table))
 
     def find_by_id(self, bid):
         resp = self.table.get_item(Key={"_id": str(bid)})
@@ -413,7 +433,7 @@ class BusModel:
         self.table.delete_item(Key={"_id": str(bid)})
 
     def search(self, source, destination, date=None):
-        items = self.table.scan().get("Items", [])
+        items = _full_scan(self.table)
         src_lower = source.lower()
         dst_lower = destination.lower()
         results = []
@@ -447,7 +467,7 @@ class BusModel:
         )
 
     def count(self):
-        return self.table.scan(Select="COUNT").get("Count", 0)
+        return _full_scan_count(self.table)
 
 
 class BookingModel:
@@ -506,17 +526,15 @@ class BookingModel:
         )
 
     def get_all(self):
-        items = _clean_items(self.table.scan().get("Items", []))
+        items = _clean_items(_full_scan(self.table))
         items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return items
 
     def count(self):
-        return self.table.scan(Select="COUNT").get("Count", 0)
+        return _full_scan_count(self.table)
 
     def count_by_type(self):
-        items = self.table.scan(
-            ProjectionExpression="item_type",
-        ).get("Items", [])
+        items = _full_scan(self.table, ProjectionExpression="item_type")
         counts = {}
         for item in items:
             t = item.get("item_type", "unknown")
