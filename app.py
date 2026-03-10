@@ -39,6 +39,18 @@ def create_app(config_name=None):
 
     register_blueprints(app)
 
+    @app.template_filter('datetimeformat')
+    def datetimeformat(value, format='%b %d, %Y %H:%M'):
+        """Convert ISO string to formatted datetime"""
+        from datetime import datetime
+        if isinstance(value, str):
+            try:
+                dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                return dt.strftime(format)
+            except:
+                return value
+        return value
+
     @app.context_processor
     def inject_globals():
         from flask import session as s

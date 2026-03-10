@@ -51,7 +51,7 @@ block content %}
           </span>
           <div class="notif-body">
             <p>{{ n.message }}</p>
-            <small>{{ n.created_at.strftime('%b %d, %Y %H:%M') }}</small>
+            <small>{{ n.created_at | datetimeformat }}</small>
           </div>
           {% if not n.read %}
           <form
